@@ -320,7 +320,7 @@ export function startServer(config: ServerConfig) {
           const workspace = await resolveWorkspace(config, mount.workspaceId);
           proxyService = "opencode";
           proxyBaseUrl = workspace.baseUrl?.trim() || undefined;
-          const response = await proxyOpencodeRequest({ request, url, workspace, proxyPath: mount.restPath });
+          const response = await proxyOpencodeRequest({ request, url, workspace, proxyPath: mount.restPath, allowedProviders: config.allowedProviders });
           return finalize(response);
         } catch (error) {
           const apiError = error instanceof ApiError
@@ -383,7 +383,7 @@ export function startServer(config: ServerConfig) {
           const actor = await requireClient(request, config, tokens);
           assertOpencodeProxyAllowed(actor, request.method, url.pathname);
           proxyService = "opencode";
-          const response = await proxyOpencodeRequest({ request, url, workspace: config.workspaces[0] });
+          const response = await proxyOpencodeRequest({ request, url, workspace: config.workspaces[0], allowedProviders: config.allowedProviders });
           return finalize(response);
         } catch (error) {
           const apiError = error instanceof ApiError
@@ -562,6 +562,7 @@ async function proxyOpencodeRequest(input: {
   url: URL;
   workspace?: WorkspaceInfo;
   proxyPath?: string;
+  allowedProviders?: string[];
 }) {
   const workspace = input.workspace;
   const baseUrl = workspace?.baseUrl?.trim() ?? "";
@@ -595,6 +596,34 @@ async function proxyOpencodeRequest(input: {
     headers,
     body,
   });
+
+  // Filter provider list when allowedProviders is configured.
+  if (
+    input.allowedProviders?.length &&
+    method === "GET" &&
+    normalizeOpencodeProxyPath(proxyPath) === "/provider/list" &&
+    response.ok
+  ) {
+    const allowed = new Set(input.allowedProviders);
+    try {
+      const json = await response.json() as {
+        all?: { id: string }[];
+        connected?: string[];
+        default?: Record<string, string>;
+      };
+      const filtered = {
+        ...json,
+        all: (json.all ?? []).filter((p) => allowed.has(p.id)),
+        connected: (json.connected ?? []).filter((id) => allowed.has(id)),
+      };
+      return new Response(JSON.stringify(filtered), {
+        status: response.status,
+        headers: { "content-type": "application/json" },
+      });
+    } catch {
+      // If parsing fails, fall through and return original response.
+    }
+  }
 
   return response;
 }

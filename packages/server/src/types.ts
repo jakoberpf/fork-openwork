@@ -58,6 +58,8 @@ export interface ServerConfig {
   hostTokenSource: "cli" | "env" | "file" | "generated";
   logFormat: LogFormat;
   logRequests: boolean;
+  /** If set, only these provider IDs are returned from the proxied provider list. */
+  allowedProviders?: string[];
 }
 
 export interface Capabilities {

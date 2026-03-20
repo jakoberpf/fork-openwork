@@ -19,6 +19,7 @@ interface CliArgs {
   workspaces: string[];
   corsOrigins?: string[];
   readOnly?: boolean;
+  allowedProviders?: string[];
   verbose?: boolean;
   logFormat?: LogFormat;
   logRequests?: boolean;
@@ -40,6 +41,8 @@ interface FileConfig {
   opencodePassword?: string;
   logFormat?: LogFormat;
   logRequests?: boolean;
+  /** Allowlist of provider IDs to expose. If set, all other providers are hidden. */
+  allowedProviders?: string[];
 }
 
 const DEFAULT_PORT = 8787;
@@ -167,6 +170,11 @@ export function parseCliArgs(argv: string[]): CliArgs {
       args.readOnly = true;
       continue;
     }
+    if (value === "--allowed-providers") {
+      args.allowedProviders = parseList(argv[index + 1]);
+      index += 1;
+      continue;
+    }
   }
   return args;
 }
@@ -190,6 +198,7 @@ export function printHelp(): void {
     "  --workspace <path>       Workspace root (repeatable)",
     "  --cors <origins>          Comma-separated origins or *",
     "  --read-only              Disable writes",
+    "  --allowed-providers <ids> Comma-separated provider IDs to expose (hides all others)",
     "  --log-format <format>     Log output format: pretty | json",
     "  --log-requests           Log incoming requests (default: true)",
     "  --no-log-requests        Disable request logging",
@@ -311,6 +320,16 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
   const host = cli.host ?? process.env.OPENWORK_HOST ?? fileConfig.host ?? DEFAULT_HOST;
   const port = cli.port ?? (process.env.OPENWORK_PORT ? Number(process.env.OPENWORK_PORT) : undefined) ?? fileConfig.port ?? DEFAULT_PORT;
 
+  const envAllowedProviders = process.env.OPENWORK_ALLOWED_PROVIDERS;
+  const allowedProviders: string[] | undefined =
+    cli.allowedProviders?.length
+      ? cli.allowedProviders
+      : envAllowedProviders
+        ? parseList(envAllowedProviders)
+        : fileConfig.allowedProviders?.length
+          ? fileConfig.allowedProviders
+          : undefined;
+
   return {
     host,
     port: Number.isNaN(port) ? DEFAULT_PORT : port,
@@ -327,5 +346,6 @@ export async function resolveServerConfig(cli: CliArgs): Promise<ServerConfig> {
     hostTokenSource,
     logFormat,
     logRequests,
+    allowedProviders,
   };
 }
